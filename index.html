@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Интерактивный Квиз</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .transition-all {
+            transition: all 0.3s ease-in-out;
+        }
+        #custom-alert {
+            transition: opacity 0.3s, transform 0.3s;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div id="app" class="w-full max-w-4xl mx-auto p-4">
+
+        <!-- Начальный экран выбора роли -->
+        <div id="role-selection" class="text-center bg-white p-8 rounded-2xl shadow-lg">
+            <h1 class="text-4xl font-bold mb-4 text-indigo-600">Добро пожаловать в Квиз!</h1>
+            <p class="text-gray-600 mb-8">Выберите свою роль, чтобы начать.</p>
+            <div class="flex flex-col sm:flex-row justify-center gap-4">
+                <button id="show-admin-view-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
+                    Я Администратор (Создать игру)
+                </button>
+                <button id="show-player-view-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
+                    Я Игрок (Присоединиться)
+                </button>
+            </div>
+        </div>
+
+        <!-- Экран Администратора -->
+        <div id="admin-view" class="hidden">
+            <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <h2 class="text-3xl font-bold mb-2 text-indigo-600">Панель Администратора</h2>
+                <div id="admin-setup">
+                    <p class="text-gray-600 mb-4">Поделитесь этим кодом игры с участниками:</p>
+                    <div class="bg-gray-200 p-4 rounded-lg text-center mb-6">
+                        <span id="game-id-display" class="text-3xl font-mono tracking-widest"></span>
+                        <button id="copy-game-id" class="ml-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Копировать</button>
+                    </div>
+                    
+                    <h3 class="text-2xl font-semibold mb-4">Вопросы квиза</h3>
+                    <div id="questions-list" class="space-y-2 mb-4">
+                        <!-- Вопросы будут добавлены сюда -->
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="text-xl font-semibold mb-2">Добавить новый вопрос</h4>
+                        <input type="text" id="question-input" placeholder="Текст вопроса" class="w-full p-2 border rounded-lg mb-2">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                            <input type="text" id="option1-input" placeholder="Ответ 1" class="w-full p-2 border rounded-lg">
+                            <input type="text" id="option2-input" placeholder="Ответ 2" class="w-full p-2 border rounded-lg">
+                            <input type="text" id="option3-input" placeholder="Ответ 3" class="w-full p-2 border rounded-lg">
+                            <input type="text" id="option4-input" placeholder="Ответ 4" class="w-full p-2 border rounded-lg">
+                        </div>
+                        <select id="correct-answer-select" class="w-full p-2 border rounded-lg mb-2">
+                            <option value="0">Ответ 1 - правильный</option>
+                            <option value="1">Ответ 2 - правильный</option>
+                            <option value="2">Ответ 3 - правильный</option>
+                            <option value="3">Ответ 4 - правильный</option>
+                        </select>
+                        <button id="add-question-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-all">Добавить вопрос</button>
+                    </div>
+
+                    <button id="start-game-btn" class="w-full mt-6 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg text-xl transition-all disabled:bg-gray-400" disabled>Начать игру</button>
+                </div>
+                
+                <div id="admin-game-running" class="hidden">
+                    <h3 id="current-question-title" class="text-2xl font-semibold mb-4 text-center"></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Игроки (<span id="player-count">0</span>)</h4>
+                            <ul id="players-list-admin" class="space-y-2"></ul>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Ответы на текущий вопрос:</h4>
+                            <ul id="answers-list" class="space-y-2"></ul>
+                        </div>
+                    </div>
+                    <button id="next-question-btn" class="w-full mt-6 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg text-xl transition-all">Следующий вопрос</button>
+                </div>
+
+                <div id="admin-game-over" class="hidden text-center">
+                    <h3 class="text-3xl font-bold mb-4 text-green-600">Игра окончена!</h3>
+                    <h4 class="text-2xl font-semibold mb-4">Итоговый рейтинг:</h4>
+                    <ul id="final-leaderboard" class="space-y-2 text-left max-w-md mx-auto"></ul>
+                    <button id="restart-game-btn" class="mt-6 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl">Начать новую игру</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран Игрока -->
+        <div id="player-view" class="hidden">
+            <div class="bg-white p-8 rounded-2xl shadow-lg">
+                <div id="player-join">
+                    <h2 class="text-3xl font-bold mb-4 text-teal-600">Присоединиться к игре</h2>
+                    <input type="text" id="game-id-input" placeholder="Код игры" class="w-full p-3 border rounded-lg mb-4 text-center font-mono tracking-widest text-xl">
+                    <input type="text" id="player-name-input" placeholder="Ваше имя" class="w-full p-3 border rounded-lg mb-4 text-xl">
+                    <button id="join-game-btn" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-4 rounded-lg text-xl transition-all disabled:bg-gray-400" disabled>Подключение...</button>
+                </div>
+
+                <div id="player-waiting" class="hidden text-center">
+                    <h3 class="text-2xl font-semibold">Добро пожаловать, <span id="player-name-display" class="text-teal-600"></span>!</h3>
+                    <p class="text-gray-600 mt-4 text-xl">Ожидаем начала игры от администратора...</p>
+                    <div class="mt-8">
+                        <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-teal-500 mx-auto"></div>
+                    </div>
+                </div>
+
+                <div id="player-question" class="hidden">
+                    <h3 id="player-question-text" class="text-2xl md:text-3xl font-bold mb-6 text-center"></h3>
+                    <div id="player-options" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Кнопки с вариантами ответов -->
+                    </div>
+                </div>
+                
+                <div id="player-answered" class="hidden text-center">
+                    <h3 class="text-2xl font-semibold text-gray-700">Ваш ответ принят!</h3>
+                    <p class="text-gray-600 mt-4 text-xl">Ожидаем следующего вопроса...</p>
+                </div>
+                
+                <div id="player-game-over" class="hidden text-center">
+                    <h3 class="text-3xl font-bold mb-4 text-green-600">Игра окончена!</h3>
+                    <p class="text-xl">Спасибо за участие!</p>
+                    <p class="text-2xl mt-4">Ваш итоговый счет: <span id="player-final-score" class="font-bold text-teal-600"></span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Кнопка "Назад" для возврата к выбору роли -->
+        <button id="back-to-roles" class="hidden fixed top-4 left-4 bg-white p-2 rounded-full shadow-md hover:bg-gray-200 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- Кастомное уведомление -->
+    <div id="custom-alert" class="hidden fixed bottom-5 left-1/2 -translate-x-1/2 bg-red-600 text-white py-3 px-6 rounded-lg shadow-lg transform translate-y-20 opacity-0">
+        <p id="custom-alert-message"></p>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- НАСТРОЙКИ FIREBASE ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyCxSDbiKfDtcl6T9kGD7rboMTyVFukt3Zs",
+          authDomain: "quiz-pet-p.firebaseapp.com",
+          projectId: "quiz-pet-p",
+          storageBucket: "quiz-pet-p.appspot.com",
+          messagingSenderId: "289247518201",
+          appId: "1:289247518201:web:263642786ac3e9f94e3128",
+          measurementId: "G-446EX51L7G"
+        };
+
+        // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-quiz-app';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- ИМПОРТЫ FIREBASE ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, addDoc, collection, onSnapshot, serverTimestamp, query, where, updateDoc, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ---
+        let app, db, auth, userId;
+        let isAuthReady = false;
+        let unsubscribeGameState = null;
+        let unsubscribePlayers = null;
+        let unsubscribeAnswers = null;
+        let unsubscribeQuestions = null;
+        
+        if (Object.keys(firebaseConfig).length === 0 && typeof __firebase_config === 'undefined') {
+            document.getElementById('app').innerHTML = `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg" role="alert"><p class="font-bold">Ошибка конфигурации</p><p>Не удалось загрузить конфигурацию Firebase.</p></div>`;
+            throw new Error("Firebase config is missing.");
+        }
+
+        try {
+            const finalConfig = Object.keys(firebaseConfig).length > 5 ? firebaseConfig : JSON.parse(__firebase_config);
+            app = initializeApp(finalConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.error("Error initializing Firebase:", e);
+            document.getElementById('app').innerHTML = `<div class="bg-red-100 text-red-700 p-4 rounded-lg">Ошибка инициализации Firebase. Проверьте консоль.</div>`;
+        }
+
+        // --- АУТЕНТИФИКАЦИЯ ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                isAuthReady = true;
+                const joinBtn = document.getElementById('join-game-btn');
+                if (joinBtn && joinBtn.disabled) {
+                    joinBtn.disabled = false;
+                    joinBtn.textContent = 'Присоединиться';
+                }
+            } else {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication failed:", error);
+                }
+            }
+        });
+        
+        // --- DOM ЭЛЕМЕНТЫ ---
+        const roleSelectionView = document.getElementById('role-selection');
+        const adminView = document.getElementById('admin-view');
+        const playerView = document.getElementById('player-view');
+        const backToRolesBtn = document.getElementById('back-to-roles');
+
+        // --- УПРАВЛЕНИЕ ВИДИМОСТЬЮ ---
+        const showView = (view) => {
+            roleSelectionView.classList.add('hidden');
+            adminView.classList.add('hidden');
+            playerView.classList.add('hidden');
+            view.classList.remove('hidden');
+            backToRolesBtn.classList.remove('hidden');
+        };
+
+        document.getElementById('show-admin-view-btn').addEventListener('click', () => {
+            showView(adminView);
+            initializeAdmin();
+        });
+
+        document.getElementById('show-player-view-btn').addEventListener('click', () => {
+            showView(playerView);
+            const joinBtn = document.getElementById('join-game-btn');
+            if (isAuthReady) {
+                joinBtn.disabled = false;
+                joinBtn.textContent = 'Присоединиться';
+            }
+        });
+        
+        backToRolesBtn.addEventListener('click', () => {
+            if (unsubscribeGameState) unsubscribeGameState();
+            if (unsubscribePlayers) unsubscribePlayers();
+            if (unsubscribeAnswers) unsubscribeAnswers();
+            if (unsubscribeQuestions) unsubscribeQuestions();
+            window.location.reload();
+        });
+
+        // --- КАСТОМНОЕ УВЕДОМЛЕНИЕ ---
+        let alertTimeout;
+        function showAlert(message) {
+            const alertBox = document.getElementById('custom-alert');
+            const messageEl = document.getElementById('custom-alert-message');
+            
+            clearTimeout(alertTimeout);
+            
+            messageEl.textContent = message;
+            alertBox.classList.remove('hidden');
+            setTimeout(() => {
+                alertBox.classList.remove('translate-y-20', 'opacity-0');
+            }, 10);
+
+            alertTimeout = setTimeout(() => {
+                alertBox.classList.add('translate-y-20', 'opacity-0');
+                setTimeout(() => {
+                    alertBox.classList.add('hidden');
+                }, 300);
+            }, 3000);
+        }
+
+        // --- ЛОГИКА АДМИНИСТРАТОРА ---
+        let currentGameId = '';
+        let questions = [];
+
+        async function initializeAdmin() {
+            currentGameId = generateGameId();
+            document.getElementById('game-id-display').textContent = currentGameId;
+            
+            const gameRef = doc(db, "quizzes", currentGameId);
+            await setDoc(gameRef, {
+                status: 'waiting',
+                currentQuestionIndex: -1,
+                createdAt: serverTimestamp()
+            });
+
+            const questionsColRef = collection(db, "quizzes", currentGameId, "questions");
+            const exampleQuestions = [
+                { text: "Столица Франции?", options: ["Берлин", "Мадрид", "Париж", "Рим"], correctAnswerIndex: 2 },
+                { text: "Сколько планет в Солнечной системе?", options: ["7", "8", "9", "10"], correctAnswerIndex: 1 }
+            ];
+            const batch = writeBatch(db);
+            exampleQuestions.forEach(q => {
+                const newQuestionRef = doc(questionsColRef);
+                batch.set(newQuestionRef, q);
+            });
+            await batch.commit();
+
+            listenToQuestions(currentGameId);
+            listenToPlayers(currentGameId);
+        }
+        
+        function listenToQuestions(gameId) {
+            const questionsColRef = collection(db, "quizzes", gameId, "questions");
+            if (unsubscribeQuestions) unsubscribeQuestions();
+            unsubscribeQuestions = onSnapshot(questionsColRef, (snapshot) => {
+                questions = [];
+                const questionsListEl = document.getElementById('questions-list');
+                questionsListEl.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const question = { id: doc.id, ...doc.data() };
+                    questions.push(question);
+                    const questionEl = document.createElement('div');
+                    questionEl.className = 'bg-gray-100 p-3 rounded-lg flex justify-between items-center';
+                    questionEl.innerHTML = `<span>${question.text}</span> <span class="text-sm text-gray-500">${question.options.length} варианта</span>`;
+                    questionsListEl.appendChild(questionEl);
+                });
+                document.getElementById('start-game-btn').disabled = questions.length === 0;
+            });
+        }
+
+        document.getElementById('add-question-btn').addEventListener('click', async () => {
+            const text = document.getElementById('question-input').value.trim();
+            const options = [
+                document.getElementById('option1-input').value.trim(),
+                document.getElementById('option2-input').value.trim(),
+                document.getElementById('option3-input').value.trim(),
+                document.getElementById('option4-input').value.trim()
+            ];
+            const correctAnswerIndex = parseInt(document.getElementById('correct-answer-select').value);
+
+            if (!text) {
+                showAlert('Пожалуйста, введите текст вопроса.');
+                return;
+            }
+            if (options.some(o => !o)) {
+                showAlert('Пожалуйста, заполните все четыре варианта ответа.');
+                return;
+            }
+
+            const questionsColRef = collection(db, "quizzes", currentGameId, "questions");
+            await addDoc(questionsColRef, { text, options, correctAnswerIndex });
+            
+            document.getElementById('question-input').value = '';
+            document.getElementById('option1-input').value = '';
+            document.getElementById('option2-input').value = '';
+            document.getElementById('option3-input').value = '';
+            document.getElementById('option4-input').value = '';
+        });
+
+        function listenToPlayers(gameId) {
+            const playersColRef = collection(db, "quizzes", gameId, "players");
+            if (unsubscribePlayers) unsubscribePlayers();
+            unsubscribePlayers = onSnapshot(playersColRef, (snapshot) => {
+                const playersListEl = document.getElementById('players-list-admin');
+                const finalLeaderboardEl = document.getElementById('final-leaderboard');
+                playersListEl.innerHTML = '';
+                finalLeaderboardEl.innerHTML = '';
+                
+                const playersData = [];
+                snapshot.forEach(doc => {
+                    playersData.push({ id: doc.id, ...doc.data() });
+                });
+
+                playersData.sort((a, b) => b.score - a.score);
+
+                playersData.forEach(player => {
+                    const playerItem = document.createElement('li');
+                    playerItem.className = 'bg-gray-100 p-3 rounded-lg flex justify-between items-center';
+                    playerItem.innerHTML = `<span>${player.name}</span><span class="font-bold text-indigo-600">${player.score}</span>`;
+                    playersListEl.appendChild(playerItem);
+                    
+                    const leaderboardItem = playerItem.cloneNode(true);
+                    finalLeaderboardEl.appendChild(leaderboardItem);
+                });
+                document.getElementById('player-count').textContent = playersData.length;
+            });
+        }
+        
+        document.getElementById('start-game-btn').addEventListener('click', async () => {
+            if (questions.length > 0) {
+                document.getElementById('admin-setup').classList.add('hidden');
+                document.getElementById('admin-game-running').classList.remove('hidden');
+                await showNextQuestion();
+            }
+        });
+
+        document.getElementById('next-question-btn').addEventListener('click', async () => {
+            await showNextQuestion();
+        });
+        
+        async function showNextQuestion() {
+            const gameRef = doc(db, "quizzes", currentGameId);
+            const gameDoc = await getDoc(gameRef);
+            const gameState = gameDoc.data();
+
+            if (gameState.currentQuestionIndex >= 0) {
+                await gradeCurrentQuestion(gameState.currentQuestionIndex);
+            }
+
+            const nextIndex = gameState.currentQuestionIndex + 1;
+
+            if (nextIndex < questions.length) {
+                await updateDoc(gameRef, {
+                    status: 'running',
+                    currentQuestionIndex: nextIndex
+                });
+                document.getElementById('current-question-title').textContent = `Вопрос ${nextIndex + 1}: ${questions[nextIndex].text}`;
+                listenToAnswers(currentGameId, questions[nextIndex].id);
+            } else {
+                await updateDoc(gameRef, {
+                    status: 'finished'
+                });
+                document.getElementById('admin-game-running').classList.add('hidden');
+                document.getElementById('admin-game-over').classList.remove('hidden');
+            }
+        }
+        
+        async function gradeCurrentQuestion(questionIndex) {
+            const question = questions[questionIndex];
+            if (!question) return;
+
+            const answersQuery = query(
+                collection(db, "quizzes", currentGameId, "answers"),
+                where("questionId", "==", question.id)
+            );
+            
+            const answersSnapshot = await getDocs(answersQuery);
+            const playersToUpdate = {};
+
+            answersSnapshot.forEach(answerDoc => {
+                const answer = answerDoc.data();
+                if (answer.answerIndex === question.correctAnswerIndex) {
+                    if (!playersToUpdate[answer.playerId]) {
+                        playersToUpdate[answer.playerId] = 0;
+                    }
+                    playersToUpdate[answer.playerId] += 10;
+                }
+            });
+
+            for (const playerId in playersToUpdate) {
+                const playerRef = doc(db, "quizzes", currentGameId, "players", playerId);
+                const playerDoc = await getDoc(playerRef);
+                if (playerDoc.exists()) {
+                    const currentScore = playerDoc.data().score || 0;
+                    await updateDoc(playerRef, { score: currentScore + playersToUpdate[playerId] });
+                }
+            }
+        }
+
+        function listenToAnswers(gameId, questionId) {
+            const answersListEl = document.getElementById('answers-list');
+            answersListEl.innerHTML = '<li class="text-gray-500">Ожидание ответов...</li>';
+            
+            const answersQuery = query(
+                collection(db, "quizzes", gameId, "answers"),
+                where("questionId", "==", questionId)
+            );
+            
+            if (unsubscribeAnswers) unsubscribeAnswers();
+            unsubscribeAnswers = onSnapshot(answersQuery, (snapshot) => {
+                const answers = [];
+                snapshot.forEach(doc => {
+                    answers.push(doc.data());
+                });
+
+                if (answers.length > 0 && answers[0].timestamp) {
+                    answers.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+                }
+                
+                answersListEl.innerHTML = '';
+                if (answers.length === 0) {
+                    answersListEl.innerHTML = '<li class="text-gray-500">Ожидание ответов...</li>';
+                    return;
+                }
+
+                answers.forEach((answer, index) => {
+                    const currentQuestion = questions.find(q => q.id === questionId);
+                    const isCorrect = currentQuestion && answer.answerIndex === currentQuestion.correctAnswerIndex;
+                    const answerItem = document.createElement('li');
+                    answerItem.className = `p-3 rounded-lg flex justify-between items-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`;
+                    
+                    let content = `<span>${answer.playerName}: ${answer.answerText}</span>`;
+                    if (index === 0) {
+                        content += `<span class="text-xs font-bold text-blue-600 bg-blue-200 px-2 py-1 rounded-full">ПЕРВЫЙ!</span>`;
+                    }
+                    answerItem.innerHTML = content;
+                    answersListEl.appendChild(answerItem);
+                });
+            });
+        }
+
+        document.getElementById('restart-game-btn').addEventListener('click', () => {
+            document.getElementById('admin-game-over').classList.add('hidden');
+            document.getElementById('admin-setup').classList.remove('hidden');
+            questions = [];
+            initializeAdmin();
+        });
+        
+        document.getElementById('copy-game-id').addEventListener('click', () => {
+            navigator.clipboard.writeText(currentGameId).then(() => {
+                const btn = document.getElementById('copy-game-id');
+                const originalText = btn.textContent;
+                btn.textContent = 'Скопировано!';
+                setTimeout(() => { btn.textContent = originalText; }, 2000);
+            });
+        });
+
+        // --- ЛОГИКА ИГРОКА ---
+        let playerGameId = '';
+        let localPlayerId = '';
+
+        document.getElementById('join-game-btn').addEventListener('click', async () => {
+            playerGameId = document.getElementById('game-id-input').value.trim();
+            const playerName = document.getElementById('player-name-input').value.trim();
+
+            if (!playerGameId || !playerName) {
+                showAlert('Пожалуйста, введите код игры и ваше имя.');
+                return;
+            }
+
+            const gameRef = doc(db, "quizzes", playerGameId);
+            const gameDoc = await getDoc(gameRef);
+
+            if (!gameDoc.exists()) {
+                showAlert('Игра с таким кодом не найдена.');
+                return;
+            }
+            
+            if (gameDoc.data().status !== 'waiting') {
+                showAlert('Эта игра уже началась или завершена.');
+                return;
+            }
+
+            localPlayerId = userId;
+            const playerRef = doc(db, "quizzes", playerGameId, "players", localPlayerId);
+            await setDoc(playerRef, {
+                name: playerName,
+                score: 0
+            });
+            
+            document.getElementById('player-name-display').textContent = playerName;
+            document.getElementById('player-join').classList.add('hidden');
+            document.getElementById('player-waiting').classList.remove('hidden');
+
+            listenToGameStateForPlayer(playerGameId);
+        });
+
+        function listenToGameStateForPlayer(gameId) {
+            const gameRef = doc(db, "quizzes", gameId);
+            if (unsubscribeGameState) unsubscribeGameState();
+            unsubscribeGameState = onSnapshot(gameRef, (doc) => {
+                const gameState = doc.data();
+                if (!gameState) return;
+
+                switch (gameState.status) {
+                    case 'running':
+                        document.getElementById('player-waiting').classList.add('hidden');
+                        document.getElementById('player-answered').classList.add('hidden');
+                        document.getElementById('player-question').classList.remove('hidden');
+                        fetchAndDisplayQuestion(gameId, gameState.currentQuestionIndex);
+                        break;
+                    case 'finished':
+                        document.getElementById('player-waiting').classList.add('hidden');
+                        document.getElementById('player-question').classList.add('hidden');
+                        document.getElementById('player-answered').classList.add('hidden');
+                        document.getElementById('player-game-over').classList.remove('hidden');
+                        showFinalScore(gameId);
+                        break;
+                    case 'waiting':
+                    default:
+                        document.getElementById('player-join').classList.add('hidden');
+                        document.getElementById('player-waiting').classList.remove('hidden');
+                        break;
+                }
+            });
+        }
+        
+        async function showFinalScore(gameId) {
+            const playerRef = doc(db, "quizzes", gameId, "players", localPlayerId);
+            const playerDoc = await getDoc(playerRef);
+            if (playerDoc.exists()) {
+                document.getElementById('player-final-score').textContent = playerDoc.data().score;
+            }
+        }
+
+        let currentQuestionsCache = [];
+        async function fetchAndDisplayQuestion(gameId, questionIndex) {
+            if (currentQuestionsCache.length === 0) {
+                const questionsColRef = collection(db, "quizzes", gameId, "questions");
+                const snapshot = await getDocs(questionsColRef);
+                snapshot.forEach(doc => currentQuestionsCache.push({ id: doc.id, ...doc.data() }));
+            }
+            
+            if (currentQuestionsCache[questionIndex]) {
+                displayQuestion(currentQuestionsCache[questionIndex], questionIndex);
+            }
+        }
+        
+        function displayQuestion(question, questionIndex) {
+            document.getElementById('player-question-text').textContent = question.text;
+            const optionsContainer = document.getElementById('player-options');
+            optionsContainer.innerHTML = '';
+            question.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.className = 'w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-4 px-4 rounded-lg text-lg transition-all transform hover:scale-105';
+                button.textContent = option;
+                button.onclick = () => submitAnswer(question.id, questionIndex, index, option);
+                optionsContainer.appendChild(button);
+            });
+        }
+        
+        async function submitAnswer(questionId, questionIndex, answerIndex, answerText) {
+            document.getElementById('player-question').classList.add('hidden');
+            document.getElementById('player-answered').classList.remove('hidden');
+            
+            const playerName = document.getElementById('player-name-input').value.trim();
+            const answerRef = doc(collection(db, "quizzes", playerGameId, "answers"));
+            
+            await setDoc(answerRef, {
+                playerId: localPlayerId,
+                playerName: playerName,
+                questionId: questionId,
+                questionIndex: questionIndex,
+                answerIndex: answerIndex,
+                answerText: answerText,
+                timestamp: serverTimestamp()
+            });
+        }
+
+        // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+        function generateGameId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+    </script>
+</body>
+</html>
