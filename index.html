@@ -32,7 +32,7 @@
             <p class="text-gray-600 mb-8">Выберите свою роль, чтобы начать.</p>
             <div class="flex flex-col sm:flex-row justify-center gap-4">
                 <button id="show-admin-view-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
-                    Я Ведущий
+                    Я Администратор
                 </button>
                 <button id="show-player-view-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
                     Я Игрок
@@ -247,7 +247,21 @@
         document.getElementById('back-to-quiz-list-btn').addEventListener('click', () => showAdminView(views.adminQuizList));
         
         function showAlert(message) {
-            // ... (реализация без изменений)
+            const alertBox = document.getElementById('custom-alert');
+            const messageEl = document.getElementById('custom-alert-message');
+            
+            clearTimeout(window.alertTimeout);
+            
+            messageEl.textContent = message;
+            alertBox.classList.remove('hidden');
+            setTimeout(() => {
+                alertBox.classList.remove('translate-y-20', 'opacity-0');
+            }, 10);
+
+            window.alertTimeout = setTimeout(() => {
+                alertBox.classList.add('translate-y-20', 'opacity-0');
+                setTimeout(() => alertBox.classList.add('hidden'), 300);
+            }, 3000);
         }
 
         // --- ЛОГИКА СОХРАНЕНИЯ/ЗАГРУЗКИ КВИЗОВ ---
@@ -270,6 +284,7 @@
                         <div class="flex gap-2">
                             <button data-id="${quiz.id}" data-name="${quiz.name}" class="edit-quiz-btn bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Редактировать</button>
                             <button data-id="${quiz.id}" class="start-game-from-list-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Начать игру</button>
+                            <button data-id="${quiz.id}" class="delete-quiz-btn bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Удалить</button>
                         </div>
                     `;
                     listEl.appendChild(quizEl);
@@ -296,7 +311,21 @@
             if (e.target.classList.contains('start-game-from-list-btn')) {
                 setupLobby(quizId);
             }
+            if (e.target.classList.contains('delete-quiz-btn')) {
+                deleteQuiz(quizId);
+            }
         });
+
+        async function deleteQuiz(quizId) {
+            if (!userId) return;
+            const questionsRef = collection(db, "users", userId, "savedQuizzes", quizId, "questions");
+            const questionsSnapshot = await getDocs(questionsRef);
+            const batch = writeBatch(db);
+            questionsSnapshot.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+            const quizRef = doc(db, "users", userId, "savedQuizzes", quizId);
+            await deleteDoc(quizRef);
+        }
 
         function editQuiz(quizId, quizName) {
             currentEditingQuizId = quizId;
@@ -316,18 +345,32 @@
                 snapshot.forEach(doc => {
                     const q = { id: doc.id, ...doc.data() };
                     const card = document.createElement('div');
-                    card.className = 'bg-white p-4 rounded-lg border';
+                    card.className = 'bg-white p-4 rounded-lg border relative';
                     const optionsHtml = q.options.map((opt, i) => 
                         `<li class="${i === q.correctAnswerIndex ? 'correct' : ''}">${i === q.correctAnswerIndex ? '✔ ' : ''}${opt}</li>`
                     ).join('');
                     card.innerHTML = `
-                        <h5 class="font-bold mb-2">${q.text}</h5>
+                        <button data-id="${q.id}" class="delete-question-btn absolute top-2 right-2 text-red-500 hover:text-red-700 font-bold text-xl">&times;</button>
+                        <h5 class="font-bold mb-2 pr-8">${q.text}</h5>
                         <ul class="list-disc list-inside text-gray-700 question-card-options">${optionsHtml}</ul>
                     `;
                     listEl.appendChild(card);
                 });
                 document.getElementById('start-game-from-editor-btn').disabled = questionCount === 0;
             });
+        }
+        
+        document.getElementById('questions-list').addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-question-btn')) {
+                const questionId = e.target.dataset.id;
+                deleteQuestion(questionId);
+            }
+        });
+
+        async function deleteQuestion(questionId) {
+            if (!userId || !currentEditingQuizId) return;
+            const questionRef = doc(db, "users", userId, "savedQuizzes", currentEditingQuizId, "questions", questionId);
+            await deleteDoc(questionRef);
         }
 
         document.getElementById('add-question-btn').addEventListener('click', async () => {
@@ -348,7 +391,6 @@
                 options, 
                 correctAnswerIndex: parseInt(document.getElementById('correct-answer-select').value) 
             });
-            // Clear inputs
             ['question-input', 'option1-input', 'option2-input', 'option3-input', 'option4-input'].forEach(id => document.getElementById(id).value = '');
         });
 
@@ -359,16 +401,9 @@
             currentGameId = generateGameId();
             document.getElementById('game-id-display').textContent = currentGameId;
             
-            // 1. Создать новую игру
             const gameRef = doc(db, "games", currentGameId);
-            await setDoc(gameRef, {
-                status: 'waiting',
-                currentQuestionIndex: -1,
-                createdAt: serverTimestamp(),
-                sourceQuizId: quizId
-            });
+            await setDoc(gameRef, { status: 'waiting', currentQuestionIndex: -1, createdAt: serverTimestamp(), sourceQuizId: quizId });
 
-            // 2. Скопировать вопросы
             const savedQuestionsRef = collection(db, "users", userId, "savedQuizzes", quizId, "questions");
             const gameQuestionsRef = collection(db, "games", currentGameId, "questions");
             const questionsSnapshot = await getDocs(savedQuestionsRef);
@@ -379,7 +414,6 @@
             });
             await batch.commit();
 
-            // 3. Перейти в лобби
             showAdminView(views.adminLobby);
             listenToPlayersInLobby(currentGameId);
         }
@@ -459,7 +493,6 @@
         }
         
         function listenToPlayersInGame(gameId) {
-            // Эта функция теперь слушает игроков и обновляет оба списка: в игре и в финальном лидерборде
             const playersRef = collection(db, "games", gameId, "players");
             if (unsubscribePlayers) unsubscribePlayers();
             unsubscribePlayers = onSnapshot(playersRef, (snapshot) => {
@@ -482,13 +515,46 @@
         }
 
         function listenToAnswers(gameId, questionId) {
-            // ... (реализация без изменений)
+            const answersListEl = document.getElementById('answers-list');
+            answersListEl.innerHTML = '<li class="text-gray-500">Ожидание ответов...</li>';
+            
+            const answersQuery = query(collection(db, "games", gameId, "answers"), where("questionId", "==", questionId));
+            
+            if (unsubscribeAnswers) unsubscribeAnswers();
+            unsubscribeAnswers = onSnapshot(answersQuery, (snapshot) => {
+                const answers = [];
+                snapshot.forEach(doc => answers.push(doc.data()));
+
+                if (answers.length > 0 && answers[0].timestamp) {
+                    answers.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+                }
+                
+                answersListEl.innerHTML = '';
+                if (answers.length === 0) {
+                    answersListEl.innerHTML = '<li class="text-gray-500">Ожидание ответов...</li>';
+                    return;
+                }
+
+                answers.forEach((answer, index) => {
+                    const currentQuestion = liveGameQuestions.find(q => q.id === questionId);
+                    const isCorrect = currentQuestion && answer.answerIndex === currentQuestion.correctAnswerIndex;
+                    const answerItem = document.createElement('li');
+                    answerItem.className = `p-3 rounded-lg flex justify-between items-center ${isCorrect ? 'bg-green-100' : 'bg-red-100'}`;
+                    
+                    let content = `<span>${answer.playerName}: ${answer.answerText}</span>`;
+                    if (index === 0) {
+                        content += `<span class="text-xs font-bold text-blue-600 bg-blue-200 px-2 py-1 rounded-full">ПЕРВЫЙ!</span>`;
+                    }
+                    answerItem.innerHTML = content;
+                    answersListEl.appendChild(answerItem);
+                });
+            });
         }
         
         document.getElementById('next-question-btn').addEventListener('click', showNextQuestion);
         document.getElementById('restart-game-btn').addEventListener('click', () => showAdminView(views.adminQuizList));
 
-        // --- ЛОГИКА ИГРОКА (с небольшими правками для новой структуры 'games') ---
+        // --- ЛОГИКА ИГРОКА ---
         let playerGameId = '';
         let localPlayerId = '';
 
@@ -602,4 +668,4 @@
 
     </script>
 </body>
-</html>
+</ht
