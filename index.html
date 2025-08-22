@@ -32,7 +32,7 @@
             <p class="text-gray-600 mb-8">Выберите свою роль, чтобы начать.</p>
             <div class="flex flex-col sm:flex-row justify-center gap-4">
                 <button id="show-admin-view-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
-                    Я Ведущий
+                    Я Администратор
                 </button>
                 <button id="show-player-view-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-bold py-3 px-6 rounded-lg text-lg transition-all transform hover:scale-105">
                     Я Игрок
@@ -44,7 +44,7 @@
         <div id="admin-view" class="hidden bg-white p-8 rounded-2xl shadow-lg">
             <!-- 1. Список квизов -->
             <div id="admin-quiz-list-view">
-                <h2 class="text-3xl font-bold mb-4 text-indigo-600">Мои Квизы</h2>
+                <h2 class="text-3xl font-bold mb-4 text-indigo-600">Доступные Квизы</h2>
                 <div id="saved-quizzes-list" class="space-y-3 mb-6">
                     <!-- Список сохраненных квизов -->
                 </div>
@@ -269,24 +269,34 @@
         // --- ЛОГИКА СОХРАНЕНИЯ/ЗАГРУЗКИ КВИЗОВ ---
         function listenToSavedQuizzes() {
             if (!userId) return;
-            const savedQuizzesRef = collection(db, "users", userId, "savedQuizzes");
+            const savedQuizzesRef = collection(db, "publicQuizzes");
             if (unsubscribeSavedQuizzes) unsubscribeSavedQuizzes();
             unsubscribeSavedQuizzes = onSnapshot(savedQuizzesRef, (snapshot) => {
                 const listEl = document.getElementById('saved-quizzes-list');
                 listEl.innerHTML = '';
                 if (snapshot.empty) {
-                    listEl.innerHTML = '<p class="text-gray-500">У вас пока нет сохраненных квизов.</p>';
+                    listEl.innerHTML = '<p class="text-gray-500">Пока нет ни одного публичного квиза. Создайте первый!</p>';
                 }
                 snapshot.forEach(doc => {
                     const quiz = { id: doc.id, ...doc.data() };
                     const quizEl = document.createElement('div');
                     quizEl.className = 'bg-gray-100 p-4 rounded-lg flex items-center justify-between';
-                    quizEl.innerHTML = `
-                        <span class="font-semibold">${quiz.name}</span>
-                        <div class="flex gap-2">
+                    
+                    let buttonsHtml = '';
+                    if (quiz.authorId === userId) {
+                        buttonsHtml = `
                             <button data-id="${quiz.id}" data-name="${quiz.name}" class="edit-quiz-btn bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Редактировать</button>
                             <button data-id="${quiz.id}" class="start-game-from-list-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Начать игру</button>
                             <button data-id="${quiz.id}" class="delete-quiz-btn bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">Удалить</button>
+                        `;
+                    } else {
+                         buttonsHtml = `<button data-id="${quiz.id}" class="start-game-from-list-btn bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Начать игру</button>`;
+                    }
+
+                    quizEl.innerHTML = `
+                        <span class="font-semibold">${quiz.name}</span>
+                        <div class="flex gap-2">
+                           ${buttonsHtml}
                         </div>
                     `;
                     listEl.appendChild(quizEl);
@@ -298,14 +308,18 @@
             const nameInput = document.getElementById('new-quiz-name-input');
             const quizName = nameInput.value.trim();
             if (quizName && userId) {
-                const savedQuizzesRef = collection(db, "users", userId, "savedQuizzes");
-                const newQuizRef = await addDoc(savedQuizzesRef, { name: quizName, createdAt: serverTimestamp() });
+                const savedQuizzesRef = collection(db, "publicQuizzes");
+                const newQuizRef = await addDoc(savedQuizzesRef, { 
+                    name: quizName, 
+                    createdAt: serverTimestamp(),
+                    authorId: userId
+                });
                 nameInput.value = '';
                 editQuiz(newQuizRef.id, quizName);
             }
         });
 
-        document.getElementById('saved-quizzes-list').addEventListener('click', (e) => {
+        document.getElementById('saved-quizzes-list').addEventListener('click', async (e) => {
             const quizId = e.target.dataset.id;
             if (e.target.classList.contains('edit-quiz-btn')) {
                 editQuiz(quizId, e.target.dataset.name);
@@ -314,18 +328,23 @@
                 setupLobby(quizId);
             }
             if (e.target.classList.contains('delete-quiz-btn')) {
-                deleteQuiz(quizId);
+                const quizRef = doc(db, "publicQuizzes", quizId);
+                const quizDoc = await getDoc(quizRef);
+                if (quizDoc.exists() && quizDoc.data().authorId === userId) {
+                    deleteQuiz(quizId);
+                } else {
+                    showAlert("У вас нет прав для удаления этого квиза.");
+                }
             }
         });
 
         async function deleteQuiz(quizId) {
-            if (!userId) return;
-            const questionsRef = collection(db, "users", userId, "savedQuizzes", quizId, "questions");
+            const questionsRef = collection(db, "publicQuizzes", quizId, "questions");
             const questionsSnapshot = await getDocs(questionsRef);
             const batch = writeBatch(db);
             questionsSnapshot.forEach(doc => batch.delete(doc.ref));
             await batch.commit();
-            const quizRef = doc(db, "users", userId, "savedQuizzes", quizId);
+            const quizRef = doc(db, "publicQuizzes", quizId);
             await deleteDoc(quizRef);
         }
 
@@ -337,7 +356,7 @@
         }
 
         function listenToQuestionsForEditor(quizId) {
-            const questionsRef = collection(db, "users", userId, "savedQuizzes", quizId, "questions");
+            const questionsRef = collection(db, "publicQuizzes", quizId, "questions");
             if (unsubscribeQuestions) unsubscribeQuestions();
             let questionCount = 0;
             unsubscribeQuestions = onSnapshot(questionsRef, (snapshot) => {
@@ -371,7 +390,7 @@
 
         async function deleteQuestion(questionId) {
             if (!userId || !currentEditingQuizId) return;
-            const questionRef = doc(db, "users", userId, "savedQuizzes", currentEditingQuizId, "questions", questionId);
+            const questionRef = doc(db, "publicQuizzes", currentEditingQuizId, "questions", questionId);
             await deleteDoc(questionRef);
         }
 
@@ -387,7 +406,7 @@
                 showAlert('Пожалуйста, заполните все поля.');
                 return;
             }
-            const questionsRef = collection(db, "users", userId, "savedQuizzes", currentEditingQuizId, "questions");
+            const questionsRef = collection(db, "publicQuizzes", currentEditingQuizId, "questions");
             await addDoc(questionsRef, { 
                 text, 
                 options, 
@@ -406,7 +425,7 @@
             const gameRef = doc(db, "games", currentGameId);
             await setDoc(gameRef, { status: 'waiting', currentQuestionIndex: -1, createdAt: serverTimestamp(), sourceQuizId: quizId });
 
-            const savedQuestionsRef = collection(db, "users", userId, "savedQuizzes", quizId, "questions");
+            const savedQuestionsRef = collection(db, "publicQuizzes", quizId, "questions");
             const gameQuestionsRef = collection(db, "games", currentGameId, "questions");
             const questionsSnapshot = await getDocs(savedQuestionsRef);
             const batch = writeBatch(db);
